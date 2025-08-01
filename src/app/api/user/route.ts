@@ -1,6 +1,6 @@
-// src/app/api/user/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
+import { prisma } from '@/lib/prisma';  // Новый импорт
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
@@ -15,8 +15,33 @@ export async function GET(req: NextRequest) {
       username?: string;
       avatar?: string;
     };
-    return NextResponse.json({ user: data });
-  } catch {
+
+    // Теперь добавляем query в Prisma по id из JWT
+    const userFromDB = await prisma.user.findUnique({
+      where: { id: data.id },
+      include: { videos: true },  // Для videoCount, если relation есть
+    });
+
+    if (!userFromDB) {
+      return NextResponse.json({ user: null });
+    }
+
+    // Сочетаем данные из JWT и БД
+    const user = {
+      id: data.id,
+      username: data.username,
+      avatar: data.avatar,
+      fullName: userFromDB.firstName,
+      email: userFromDB.email,
+      level: userFromDB.level,
+      plan: userFromDB.plan,
+      createdAt: userFromDB.createdAt ? userFromDB.createdAt.toISOString() : null,
+      videoCount: userFromDB.videos ? userFromDB.videos.length : 0,
+    };
+
+    return NextResponse.json({ user });
+  } catch (error) {
+    console.error('Ошибка в API /user:', error);
     return NextResponse.json({ user: null });
   }
 }

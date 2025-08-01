@@ -2,26 +2,34 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';    // ← обязательно
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import UserMenu from '@/components/UserMenu';
 import LoginModal from '@/components/LoginModal';
 
-type User = { id: string; username?: string; avatar?: string };
+type User = { 
+  id: string; 
+  username?: string; 
+  fullName?: string;
+  avatar?: string; 
+  level: number; // 0-100
+  plan: 'free' | 'base' | 'pro';
+  createdAt: string; // ISO date
+  videoCount: number;
+  email?: string;
+};
 
 export default function Header() {
-  const [open, setOpen]   = useState(false);
-  const [user, setUser]   = useState<User | null>(null);
-  const pathname          = usePathname();       // ← хук отслеживает URL
+  const [open, setOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const pathname = usePathname();
 
-  // При любом изменении пути (например: на /dashboard после логина)
-  // заново фетчим /api/user и обновляем user‑стейт
   useEffect(() => {
     fetch('/api/user', { credentials: 'include' })
       .then(res => res.json())
       .then(data => setUser(data.user))
       .catch(() => setUser(null));
-  }, [pathname]);                                 // ← задаём зависимость
+  }, [pathname]);
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -32,12 +40,15 @@ export default function Header() {
     <>
       <header className="h-20 px-6 flex items-center justify-between bg-brand_blue shadow-md">
         <Link href="/" className="flex items-center gap-2 ml-[10px]">
-          <img src="/logo.png" alt="logo" className="h-14 w-auto" />
+          <img src="/logo2.png" alt="logo" className="h-14 w-auto" />
         </Link>
 
         <div className="flex items-center gap-4 mr-[10px]">
           {user ? (
-            <UserMenu avatarUrl={user.avatar} onLogout={handleLogout} />
+            <UserMenu
+              user={user} // Прокидываем весь user объект
+              onLogout={handleLogout}
+            />
           ) : (
             <button
               onClick={() => setOpen(true)}

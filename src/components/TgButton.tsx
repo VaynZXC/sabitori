@@ -1,3 +1,5 @@
+// src/components/TgButton.tsx
+
 'use client';
 
 import { oauthURL } from '@/lib/telegram';

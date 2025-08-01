@@ -12,8 +12,8 @@
   --font-mono: var(--font-geist-mono);
   --color-cegment: #10131a;
   --color-navbar: #141722;
-  --color-header: #a92117;
   --color-brand_blue: #181e30;
+  --color-profile: #141722;
   --color-nav:  #cfd4ff;             /* основной текст пунктов */
   --color-nav-muted: #9aa0c3;        /* иконка/неактивный */
   --color-nav-active: #ffffff;       /* активный пункт */
@@ -30,4 +30,41 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.glow-bar {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.glow-bar:hover {
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5); /* Неон-глоу синий */
+  transform: scale(1.05);
+}
+
+.glow-bar::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, transparent, rgba(59, 130, 246, 0.3));
+  filter: blur(5px);
+  opacity: 0;
+  transition: opacity 0.3s;
+  border-radius: 9999px; /* Для круглых углов */
+}
+
+.glow-bar:hover::after {
+  opacity: 1;
+}
+
+.glow-hover:hover {
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5); /* Синий glow */
+  transform: scale(1.02); /* Лёгкое увеличение для эффекта */
+}
+
+.bg-color-profile {
+  background-color: #1e293b; /* Или твой цвет, например, тёмно-синий как на скриншоте */
 }

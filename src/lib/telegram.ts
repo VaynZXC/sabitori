@@ -1,12 +1,12 @@
-const BOT_ID = 8211248151;                                 // цифры до ":" 8211248151:AAHl8JusPgq_Bjj0iGs5NaxVdn49ranYMcw
-const BASE   = process.env.BASE_URL!;                        // https://…ngrok…
-const ORIGIN   = encodeURIComponent("https://1158d6625f61.ngrok-free.app");
-const REDIRECT = encodeURIComponent("https://1158d6625f61.ngrok-free.app/api/auth/telegram");
+// src/lib/telegram.ts
+
+const BOT_ID   = Number(process.env.NEXT_PUBLIC_TELEGRAM_BOT_ID);
+const ORIGIN   = encodeURIComponent(process.env.NEXT_PUBLIC_ORIGIN!);
+const REDIRECT = encodeURIComponent(process.env.NEXT_PUBLIC_REDIRECT_URL!);
 
 export const oauthURL =
   `https://oauth.telegram.org/auth` +
   `?bot_id=${BOT_ID}` +
   `&origin=${ORIGIN}` +
-  `&redirect_uri=${REDIRECT}` +
-  `&embed=1` +
+  `&redirect_url=${REDIRECT}` +         // REDIRECT = https://sabitori.ru/api/auth/telegram
   `&request_access=write`;
