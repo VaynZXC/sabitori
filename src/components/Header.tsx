@@ -1,20 +1,20 @@
-// src/components/Header.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import UserMenu from '@/components/UserMenu';
 import LoginModal from '@/components/LoginModal';
 
 type User = { 
   id: string; 
   username?: string; 
-  fullName?: string;
+  firstName?: string;
   avatar?: string; 
-  level: number; // 0-100
+  level: number;
   plan: 'free' | 'base' | 'pro';
-  createdAt: string; // ISO date
+  createdAt: string;
   videoCount: number;
   email?: string;
 };
@@ -22,13 +22,22 @@ type User = {
 export default function Header() {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true); // Опционально для лоадера
   const pathname = usePathname();
 
   useEffect(() => {
+    setLoading(true);
     fetch('/api/user', { credentials: 'include' })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('Ошибка fetch');
+        return res.json();
+      })
       .then(data => setUser(data.user))
-      .catch(() => setUser(null));
+      .catch(err => {
+        console.error(err);
+        setUser(null);
+      })
+      .finally(() => setLoading(false));
   }, [pathname]);
 
   const handleLogout = async () => {
@@ -44,24 +53,14 @@ export default function Header() {
         </Link>
 
         <div className="flex items-center gap-4 mr-[10px]">
-          {user ? (
-            <UserMenu
-              user={user} // Прокидываем весь user объект
-              onLogout={handleLogout}
-            />
+          {loading ? (
+            <span>Загрузка...</span> // Опциональный лоадер
+          ) : user ? (
+            <UserMenu user={user} onLogout={handleLogout} />
           ) : (
             <button
               onClick={() => setOpen(true)}
-              className="
-                px-20 py-4
-                rounded-xl
-                bg-[#1d233b]
-                text-white font-semibold
-                shadow-inner
-                hover:bg-[#232b46]
-                transition-colors
-                mr-[10px]
-              "
+              className="px-20 py-4 rounded-xl bg-[#1d233b] text-white font-semibold shadow-inner hover:bg-[#232b46] transition-colors mr-[10px]"
             >
               Login
             </button>

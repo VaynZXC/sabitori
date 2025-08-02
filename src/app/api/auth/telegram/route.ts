@@ -8,8 +8,19 @@ const BOT_TOKEN   = process.env.BOT_TOKEN!;
 const JWT_SECRET  = process.env.JWT_SECRET!;
 const prisma      = new PrismaClient();
 
+// Интерфейс для данных от Telegram (чтобы избежать any)
+interface TelegramData {
+  id: number;
+  username?: string;
+  first_name?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+  [key: string]: string | number | undefined; // Добавили | undefined для optional полей
+}
+
 // Общая функция, обрабатывающая и GET, и POST
-async function handleAuth(rawData: Record<string, any>) {
+async function handleAuth(rawData: TelegramData) {
   // 0. Преобразуем id к строке, чтобы Prisma не жаловался
   const userId = String(rawData.id);
 
@@ -78,12 +89,12 @@ async function handleAuth(rawData: Record<string, any>) {
 
 // Обработка GET-запроса (OAuth redirect с query-параметрами)
 export async function GET(req: NextRequest) {
-  const data = Object.fromEntries(req.nextUrl.searchParams) as Record<string, any>;
+  const data = Object.fromEntries(req.nextUrl.searchParams) as TelegramData; 
   return handleAuth(data);
 }
 
 // Обработка POST-запроса (если вы используете client-side flow)
 export async function POST(req: NextRequest) {
-  const data = await req.json() as Record<string, any>;
+  const data = await req.json() as TelegramData; 
   return handleAuth(data);
 }

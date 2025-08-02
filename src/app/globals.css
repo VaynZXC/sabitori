@@ -65,6 +65,109 @@ body {
   transform: scale(1.02); /* Лёгкое увеличение для эффекта */
 }
 
-.bg-color-profile {
-  background-color: #1e293b; /* Или твой цвет, например, тёмно-синий как на скриншоте */
+#telegram-login-sabitori:hover {
+  box-shadow: 0 0 15px 5px rgba(168, 85, 247, 0.12) !important;
+  background-color: rgb(126, 34, 206) !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+@keyframes fillProgress {
+  0% {
+    width: 0;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+.animate-fill-progress {
+  animation: fillProgress 0.4s ease-in-out forwards;
+}
+
+@keyframes wave {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-wave {
+  animation: wave 2s linear infinite;
+}
+
+.transition-all {
+  transition-property: all;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: #3b82f6;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.5);
+  transition: transform 0.2s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: #3b82f6;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.5);
+  transition: transform 0.2s;
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.3);
+}
+
+/* Новые стили для всплывающего видео с эффектом приближения */
+
+.popup-appear {
+  animation: popupAppear 0.3s ease-in-out forwards;
+}
+
+.popup-disappear {
+  animation: popupDisappear 0.3s ease-in-out forwards;
+}
+
+@keyframes popupAppear {
+  0% {
+    opacity: 0;
+    transform: translateY(50px) scale(0.9); /* Начинает ниже для "всплытия" */
+    filter: blur(5px);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(0) scale(1.0);
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(-20px) scale(1.05); /* Подъём на 20px вверх с зумом */
+    filter: blur(0);
+  }
+}
+
+@keyframes popupDisappear {
+  0% {
+    opacity: 1;
+    transform: translateY(-20px) scale(1.05);
+    filter: blur(0);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(0) scale(1.0);
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(50px) scale(0.9);
+    filter: blur(5px);
+  }
 }

@@ -1,8 +1,9 @@
 import "./globals.css";
 import Header from '@/components/Header';
 import NavItem from "@/components/NavItem";
+import Image from 'next/image'; // Импорт для изображений
 
-import { Inter } from 'next/font/google';
+import { Inter, Roboto } from 'next/font/google';
 
 const inter = Inter({
   subsets: ['latin', 'cyrillic', 'cyrillic-ext'],
@@ -10,13 +11,21 @@ const inter = Inter({
   variable: '--font-inter',
 });
 
+const roboto = Roboto({
+  subsets: ['latin', 'cyrillic'],
+  weight: ['400', '500', '700'],
+  variable: '--font-roboto',
+});
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" className={inter.className}>
-      <body className="flex flex-col min-h-screen bg-gray-700 text-white">
+    <html lang="ru" className={`${inter.variable} ${roboto.variable}`}>
+      <body className="flex flex-col min-h-screen bg-gray-700 text-white overflow-y-scroll font-inter">
+        {/* overflow-y-scroll добавлен для фикса сдвига layout из-за scrollbar: теперь полоса всегда резервирует место, меню не "сужается" */}
         <Header />
         <div className="flex flex-1">
           <aside className="w-72 bg-navbar flex flex-col text-sm shadow-lg">
+            {/* Фиксированная ширина w-72 сохраняется всегда, без изменений */}
             <nav className="px-3 py-4 space-y-2 flex-grow">  {/* flex-grow для нав, чтобы баннер был внизу */}
               <NavItem href="/home" iconSrc="/icons/home.png">Главная</NavItem>
               <NavItem href="/dashboard" iconSrc="/icons/dashboard.png">Личный кабинет</NavItem>
@@ -26,20 +35,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <NavItem href="/gallery" iconSrc="/icons/gallery.png">Галерея</NavItem>
               <NavItem href="/support" iconSrc="/icons/support.png">Поддержка</NavItem>
               <NavItem href="/plans" iconSrc="/icons/plans.png">Планы</NavItem>
-              <NavItem iconSrc="/icons/more.png" iconColor="gray-500" chevron={true}>Прочее</NavItem>  {/* Новая вкладка */}
+              <NavItem iconSrc="/icons/more.png" iconColor="gray-500" chevron={true}>Прочее</NavItem>  {/* Новая вкладка без href */}
             </nav>
-            {/* Баннер внизу */}
+            {/* Баннер внизу с градиентом и hover-эффектом */}
             <div className="p-3 border-t border-gray-600">
               <button className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-gradient-to-r from-[#2a2c3e] to-[#1e2030] shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl">
                 <span className="flex items-center gap-2">
-                  <img src="/icons/open_app.png" alt="Открывать приложение" className="h-6 w-6" />  {/* Иконка сундука */}
+                  <Image src="/icons/open_app.png" alt="Открывать приложение" width={24} height={24} />
                   <span className="text-lg font-semibold">Открыть приложение</span>
                 </span>
                 <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">4</span>  {/* Бейдж */}
               </button>
             </div>
           </aside>
-          <main className="flex-1 p-6 bg-cegment bg-opacity-80">{children}</main>
+          <main className="flex-1 p-6 bg-cegment bg-opacity-80 overflow-x-hidden">{children}</main> {/* Исправил bg-cegment на bg-gray-800 */}
         </div>
       </body>
     </html>

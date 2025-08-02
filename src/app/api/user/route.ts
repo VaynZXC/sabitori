@@ -5,20 +5,20 @@ import { prisma } from '@/lib/prisma';  // Новый импорт
 const JWT_SECRET = process.env.JWT_SECRET!;
 
 export async function GET(req: NextRequest) {
-  const token = req.cookies.get("token")?.value;
+  const token = req.cookies.get("authToken")?.value; // Изменили на 'authToken' для соответствия логинам
   if (!token) {
     return NextResponse.json({ user: null });
   }
   try {
     const data = jwt.verify(token, JWT_SECRET) as {
-      id: string;
+      userId: string; // Изменили на userId для соответствия твоему JWT в логинах
       username?: string;
       avatar?: string;
     };
 
     // Теперь добавляем query в Prisma по id из JWT
     const userFromDB = await prisma.user.findUnique({
-      where: { id: data.id },
+      where: { id: data.userId },
       include: { videos: true },  // Для videoCount, если relation есть
     });
 
@@ -28,9 +28,9 @@ export async function GET(req: NextRequest) {
 
     // Сочетаем данные из JWT и БД
     const user = {
-      id: data.id,
-      username: data.username,
-      avatar: data.avatar,
+      id: data.userId,
+      username: data.username || userFromDB.username,
+      avatar: data.avatar || userFromDB.avatar,
       fullName: userFromDB.firstName,
       email: userFromDB.email,
       level: userFromDB.level,

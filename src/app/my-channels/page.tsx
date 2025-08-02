@@ -28,6 +28,7 @@ interface Channel {
   subs: number;
   views: number;
   active: boolean;
+  avatar?: string; // Добавили это поле (optional, чтобы могло быть undefined)
   // ... другие поля
 }
 
