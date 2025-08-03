@@ -39,6 +39,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       }
       // Успех: Закрой модалку и обнови сессию
       onClose();
+      window.location.href = '/dashboard';
       // Добавьте редирект или обновление состояния пользователя здесь
     } catch (err: any) {
       setError(err.message || 'Неверный логин или пароль');
@@ -67,6 +68,8 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       setShowRegisterForm(false);
       setShowLoginForm(true); // Переключить на логин после регистрации
       setError(''); // Очистить ошибки
+      onClose();
+      window.location.href = '/dashboard';
     } catch (err: any) {
       setError(err.message || 'Ошибка при регистрации');
     }

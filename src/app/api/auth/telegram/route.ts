@@ -65,15 +65,11 @@ async function handleAuth(rawData: TelegramData) {
     });
 
     // 7. Генерим JWT
-    const token = jwt.sign(
-      { id: user.id, username: user.username, avatar: user.avatar },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = jwt.sign({ userId: user.id, username: user.username, avatar: user.avatar }, JWT_SECRET, { expiresIn: "7d" });
 
     // 8. Редиректим на /dashboard и ставим куку
     const res = NextResponse.redirect(new URL("/dashboard", process.env.NEXT_PUBLIC_ORIGIN!));
-    res.cookies.set("token", token, {
+    res.cookies.set("authToken", token, {
       httpOnly: true,
       secure:   process.env.NODE_ENV === "production",
       path:     "/",

@@ -35,7 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <NavItem href="/gallery" iconSrc="/icons/gallery.png">Галерея</NavItem>
               <NavItem href="/support" iconSrc="/icons/support.png">Поддержка</NavItem>
               <NavItem href="/plans" iconSrc="/icons/plans.png">Планы</NavItem>
-              <NavItem iconSrc="/icons/more.png" iconColor="gray-500" chevron={true}>Прочее</NavItem>  {/* Новая вкладка без href */}
+              <NavItem iconSrc="/icons/more.png" chevron={true}>Прочее</NavItem>  {/* Новая вкладка без href */}
             </nav>
             {/* Баннер внизу с градиентом и hover-эффектом */}
             <div className="p-3 border-t border-gray-600">

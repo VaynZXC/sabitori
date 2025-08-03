@@ -171,3 +171,32 @@ input[type="range"]::-moz-range-thumb:hover {
     filter: blur(5px);
   }
 }
+
+/* Тень для текста субтитров (для читаемости на фоне) */
+.shadow-text {
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+}
+
+/* Анимация появления по словам */
+.animate-word-by-word {
+  animation: wordAppear 2s ease-in-out infinite;
+}
+
+@keyframes wordAppear {
+  0% { opacity: 0; transform: translateY(20px); }
+  20% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-20px); }
+}
+
+/* Стиль выделения как в референсе */
+.highlight-text span {
+  font-weight: bold;
+  text-transform: uppercase;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: background-color 0.3s, transform 0.3s;
+}
+
+.highlight-text:hover span {
+  transform: scale(1.05);
+}

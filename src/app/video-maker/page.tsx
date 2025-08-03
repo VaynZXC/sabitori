@@ -2,18 +2,30 @@
 
 import React, { useState } from 'react';
 
+function throttle(func: (...args: any[]) => void, limit: number) {
+  let inThrottle: boolean;
+  return function (this: any, ...args: any[]) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => (inThrottle = false), limit);
+    }
+  };
+}
+
 export default function VideoMaker() {
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0); // 0: Сценарий, 1: Озвучка, 2: Фон, 3: Субтитры, 4: Эффект, 5: Финал
   const [showCustomPrompt, setShowCustomPrompt] = useState(false); // Toggle для кастомного промпта
-
-  // Состояние для Сценария
+  // Состояние для Сценария (добавил loading и error)
   const [scenarioData, setScenarioData] = useState({
-    model: 'grok',
+    model: 'gpt-4o-mini', // Изменил дефолт на gpt-4o-mini, как в твоём коде
     idea: '',
     prompt: '',
     scenario: '',
   });
+  const [isGeneratingScenario, setIsGeneratingScenario] = useState(false);
+  const [scenarioError, setScenarioError] = useState<string | null>(null);
 
   // Состояние для Озвучки (добавлены gender и voiceName)
   const [voiceData, setVoiceData] = useState({
@@ -42,19 +54,20 @@ export default function VideoMaker() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Состояние для Субтитров
+  // Расширенное состояние для Субтитров с новыми полями
   const [subtitlesData, setSubtitlesData] = useState({
-    style: 'simple',
-    font: 'sans-serif',
-    color: '#ffffff',
+    style: 'simple' as 'simple' | 'animated' | 'bold' | 'highlight',
+    font: 'sans-serif' as 'sans-serif' | 'serif' | 'monospace' | 'cursive' | 'fantasy',
+    textColor: '#ffffff',
+    animationColor: '#a855f7', // Фиолетовый по умолчанию по референсу
+    position: 'bottom' as 'top' | 'middle' | 'bottom',
     subtitlesText: '',
   });
 
-  // Состояние для Эффектов
+  // Расширенное состояние для Эффектов
   const [effectData, setEffectData] = useState({
-    transition: 'fade',
-    zoom: false,
-    pan: false,
+    selectedEffect: null as string | null,
+    opacity: 1.0, // Прозрачность от 0 до 1
   });
 
   // Состояние для Финала
@@ -79,7 +92,7 @@ export default function VideoMaker() {
       case 3:
         return subtitlesData.subtitlesText.trim() !== '';
       case 4:
-        return effectData.transition !== '';
+        return effectData.selectedEffect !== null;
       case 5:
         return finalData.exported;
       default:
@@ -108,10 +121,42 @@ export default function VideoMaker() {
     setScenarioData({ ...scenarioData, [e.target.name]: e.target.value });
   };
 
-  const handleGenerateScenario = () => {
-    const generated = `Сгенерированный сценарий на основе модели ${scenarioData.model}, идеи "${scenarioData.idea}" и промпта "${scenarioData.prompt}"`;
-    setScenarioData({ ...scenarioData, scenario: generated });
-    alert('Сценарий готов!');
+  const handleGenerateScenario = async () => {
+    setIsGeneratingScenario(true);
+    setScenarioError(null);
+    try {
+      let fullPrompt = scenarioData.idea;
+      if (showCustomPrompt && scenarioData.prompt) {
+        fullPrompt += `\n${scenarioData.prompt}`;
+      }
+      if (!fullPrompt.trim()) {
+        throw new Error('Идея или промпт обязательны');
+      }
+
+      let response;
+      const apiEndpoint = scenarioData.model.startsWith('grok') ? '/api/generate-scenario-grok' : '/api/generate-scenario-chatgpt';
+      response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: fullPrompt,
+          model: scenarioData.model,
+          max_tokens: 5000,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Ошибка сервера');
+      }
+
+      const data = await response.json();
+      setScenarioData({ ...scenarioData, scenario: data.scenario });
+    } catch (err) {
+      setScenarioError((err as Error).message || 'Неизвестная ошибка');
+    } finally {
+      setIsGeneratingScenario(false);
+    }
   };
 
   // Обработчики для Озвучки (обновлено для gender и voiceName)
@@ -135,7 +180,6 @@ export default function VideoMaker() {
     const audioUrl = '/audio/test.mp3'; // Для тестов; замени на реальный URL от API
     setVoiceData({ ...voiceData, audioUrl });
     setIsGenerating(false);
-    alert('Озвучка готова!');
   };
 
   // Плейсхолдер для голосов (можно расширить по моделям)
@@ -172,7 +216,6 @@ export default function VideoMaker() {
     // Симуляция генерации слайдшоу через ИИ
     const url = 'https://example.com/generated_slide_show.mp4'; // Placeholder для видео-слайдшоу
     setBackgroundData({ ...backgroundData, url });
-    alert('Фон слайдшоу готов!');
   };
 
   const handleYoutubeLink = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,7 +224,6 @@ export default function VideoMaker() {
       const videoId = extractYouTubeId(youtubeUrl);
       if (videoId) {
         setBackgroundData({ ...backgroundData, url: `https://www.youtube.com/embed/${videoId}`, type: 'youtube' });
-        alert('YouTube видео добавлено!');
       } else {
         alert('Неверный формат ссылки на YouTube!');
       }
@@ -220,7 +262,6 @@ export default function VideoMaker() {
         type: file.type.startsWith('video/') ? 'video' : 'image',
         thumbnail,
       });
-      alert('Файл добавлен локально!');
     }
   };
 
@@ -274,33 +315,36 @@ export default function VideoMaker() {
         type: file.type.startsWith('video/') ? 'video' : 'image',
         thumbnail, // Новый ключ для превью
       });
-      alert('Фон загружен!');
     }
   };
 
-  // Обработчики для Субтитров
-  const handleSubtitlesChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLTextAreaElement | HTMLInputElement>) => {
-    const value = e.target.type === 'color' ? e.target.value : e.target.value;
-    setSubtitlesData({ ...subtitlesData, [e.target.name]: value });
+  // Обработчики для Субтитров (расширенные)
+  const handleSubtitlesChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    const newValue = type === 'color' ? value : value;
+    setSubtitlesData({ ...subtitlesData, [name]: newValue });
   };
 
   const handleGenerateSubtitles = () => {
-    const generated = 'Сгенерированные субтитры на основе сценария...'; // Placeholder
+    // Placeholder для генерации субтитров на основе сценария и озвучки
+    // В реальности здесь будет API-запрос для синхронизации с аудио
+    const generated = 'The light coming through the window illuminated the room, creating a warm and inviting atmosphere.'; // Тестовый текст, вдохновлённый референсом
     setSubtitlesData({ ...subtitlesData, subtitlesText: generated });
-    alert('Субтитры готовы!');
   };
 
-  // Обработчики для Эффектов
-  const handleEffectChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
-    const value = e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value;
-    setEffectData({ ...effectData, [e.target.name]: value });
+  // Обработчики для Эффектов (новые)
+  const handleEffectSelect = (effectName: string) => {
+    setEffectData({ ...effectData, selectedEffect: effectName });
   };
+
+  const handleOpacityChange = throttle((e: React.ChangeEvent<HTMLInputElement>) => {
+    setEffectData({ ...effectData, opacity: parseFloat(e.target.value) });
+  }, 1000); // 100мс задержка между обновлениями
 
   // Обработчики для Финала
   const handleGenerateFinal = () => {
     const previewUrl = 'https://example.com/final_video.mp4'; // Placeholder
     setFinalData({ ...finalData, previewUrl, exported: true });
-    alert('Видео готово!');
   };
 
   // Улучшенный прогресс-бар с отступом
@@ -348,11 +392,10 @@ export default function VideoMaker() {
             onChange={handleScenarioChange}
             className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500 transition-all"
           >
-            <option value="grok">Grok</option>
-            <option value="gpt-4">GPT-4</option>
-            <option value="claude">Claude</option>
+            <option value="gpt-4o">ChatGPT</option>
+            <option value="claude">Claude</option> {/* Если Claude — добавь отдельный SDK позже */}
+            <option value="grok-3-mini">Grok</option> {/* Добавили Grok */}
           </select>
-
           <label className="block text-base font-medium mt-4 mb-2 font-roboto">Идея</label>
           <textarea
             name="idea"
@@ -360,9 +403,8 @@ export default function VideoMaker() {
             onChange={handleScenarioChange}
             className="w-full bg-gray-800 rounded-md p-3 text-base text-white italic placeholder:italic border border-gray-600 focus:border-blue-500"
             rows={3}
-            placeholder="Кратко опишите идею..."
+            placeholder="Опишите идею... Например: 'My wife left me after 30 years…'"
           />
-
           <div className="mt-4">
             <button
               onClick={() => setShowCustomPrompt(!showCustomPrompt)}
@@ -377,19 +419,19 @@ export default function VideoMaker() {
                 onChange={handleScenarioChange}
                 className="w-full bg-gray-800 rounded-md p-3 text-base text-white mt-2 italic placeholder:italic border border-gray-600 focus:border-blue-500"
                 rows={3}
-                placeholder="Ваш промпт..."
+                placeholder="Ваш промпт... (добавится к идее)"
               />
             )}
           </div>
-
           <button
             onClick={handleGenerateScenario}
-            className="mt-4 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-md text-white text-base font-bold transition-all duration-300 hover:from-blue-600 hover:to-blue-700 hover:shadow-md hover:scale-105"
+            disabled={isGeneratingScenario}
+            className={`mt-4 px-6 py-3 rounded-md text-white text-base font-bold transition-all duration-300 ${isGeneratingScenario ? 'bg-gray-500 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:shadow-md hover:scale-105'}`}
           >
-            Генерировать
+            {isGeneratingScenario ? 'Генерирую...' : 'Генерировать'}
           </button>
+          {scenarioError && <p className="mt-2 text-red-500 text-sm">{scenarioError}</p>}
         </div>
-
         <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg">
           <label className="block text-base font-medium mb-2 font-roboto">Сценарий</label>
           <textarea
@@ -397,22 +439,21 @@ export default function VideoMaker() {
             value={scenarioData.scenario}
             onChange={handleScenarioChange}
             className="w-full h-[400px] bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
-            placeholder="Результат здесь..."
+            placeholder="Результат здесь... (можно редактировать вручную)"
           />
         </div>
       </div>
-
       <div className="flex justify-between mt-6">
-        <button 
+        <button
           onClick={handlePrevStep}
           className="px-6 py-3 bg-gradient-to-r from-gray-600 to-gray-700 rounded-md text-white text-base font-medium transition-all duration-300 hover:from-gray-700 hover:to-gray-800 hover:scale-105 shadow-sm"
         >
           Назад
         </button>
-        <button 
+        <button
           onClick={handleNextStep}
-          disabled={!canGoNext()}
-          className={`px-6 py-3 rounded-md text-white text-base font-bold transition-all duration-300 shadow-sm ${canGoNext() ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 hover:scale-105' : 'bg-gray-500 cursor-not-allowed'}`}
+          disabled={!canGoNext() || isGeneratingScenario}
+          className={`px-6 py-3 rounded-md text-white text-base font-bold transition-all duration-300 shadow-sm ${canGoNext() && !isGeneratingScenario ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 hover:scale-105' : 'bg-gray-500 cursor-not-allowed'}`}
         >
           Далее
         </button>
@@ -533,7 +574,7 @@ export default function VideoMaker() {
   <div className="space-y-6 w-full max-w-full shrink-0 px-4">
     <div className="flex items-center justify-center min-h-[510px]"> {/* Полный экран для выбора/настроек */}
       {!selectedBackgroundType ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-26 min-w-[1000px] max-w-2xl overflow-visible relative mt-[300px]">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-w-[1000px] max-w-2xl overflow-visible relative mt-[300px]">
           {/* Кнопка "Создать с помощью ИИ" */}
           <div
             className="group relative cursor-pointer rounded-xl shadow-xl min-w-[350px] transition-all duration-500 ease-in-out hover:scale-105 hover:shadow-[0_0_20px_rgba(59,130,246,0.7)] p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-center font-bold text-lg overflow-visible z-10"
@@ -767,145 +808,163 @@ export default function VideoMaker() {
   </div>
 );
 
+  // Полностью переписанный renderSubtitlesStep с новым дизайном
   const renderSubtitlesStep = () => (
     <div className="space-y-6 w-full max-w-full shrink-0 px-4">
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-6 md:gap-12">
-        <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg">
-          <label className="block text-base font-medium mb-2 font-roboto">Озвучка</label>
-          {voiceData.audioUrl ? (
-            <audio controls className="w-full">
-              <source src={voiceData.audioUrl} type="audio/mpeg" />
-            </audio>
-          ) : (
-            <p className="text-gray-400 text-sm font-normal">Не готова</p>
-          )}
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-6 md:gap-12">
+        {/* Левая часть: Настройки субтитров */}
+        <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg space-y-6">
+          <h3 className="text-xl font-bold text-white mb-4 font-roboto">Настройки субтитров</h3>
 
-        <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg">
-          <label className="block text-base font-medium mb-2 font-roboto">Стиль</label>
-          <select
-            name="style"
-            value={subtitlesData.style}
-            onChange={handleSubtitlesChange}
-            className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
-          >
-            <option value="simple">Простой</option>
-            <option value="animated">Анимированный</option>
-            <option value="bold">Жирный</option>
-          </select>
+          {/* Стиль */}
+          <div>
+            <label className="block text-base font-medium mb-2 text-gray-300 font-roboto">Стиль</label>
+            <select
+              name="style"
+              value={subtitlesData.style}
+              onChange={handleSubtitlesChange}
+              className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500 transition-all duration-300 hover:shadow-[0_0_5px_rgba(59,130,246,0.3)]"
+            >
+              <option value="simple">Простой (стандартный текст)</option>
+              <option value="animated">Анимированный (появление по словам)</option>
+              <option value="bold">Жирный (с жирным шрифтом)</option>
+              <option value="highlight">Выделенный (с цветным блоком, как в референсе)</option>
+            </select>
+            <p className="mt-1 text-sm text-gray-400 italic">Выберите стиль для отображения субтитров в видео.</p>
+          </div>
 
-          <label className="block text-base font-medium mt-4 mb-2 font-roboto">Шрифт</label>
-          <select
-            name="font"
-            value={subtitlesData.font}
-            onChange={handleSubtitlesChange}
-            className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
-          >
-            <option value="sans-serif">Sans-serif</option>
-            <option value="serif">Serif</option>
-            <option value="monospace">Monospace</option>
-          </select>
+          {/* Шрифт */}
+          <div>
+            <label className="block text-base font-medium mb-2 text-gray-300 font-roboto">Шрифт</label>
+            <select
+              name="font"
+              value={subtitlesData.font}
+              onChange={handleSubtitlesChange}
+              className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500 transition-all duration-300 hover:shadow-[0_0_5px_rgba(59,130,246,0.3)]"
+            >
+              <option value="sans-serif">Sans-serif (без засечек, современный)</option>
+              <option value="serif">Serif (с засечками, классический)</option>
+              <option value="monospace">Monospace (моноширинный, кодовый)</option>
+              <option value="cursive">Cursive (рукописный)</option>
+              <option value="fantasy">Fantasy (декоративный)</option>
+            </select>
+            <p className="mt-1 text-sm text-gray-400 italic">Шрифт влияет на читаемость и эстетику.</p>
+          </div>
 
-          <label className="block text-base font-medium mt-4 mb-2 font-roboto">Цвет</label>
-          <input
-            type="color"
-            name="color"
-            value={subtitlesData.color}
-            onChange={handleSubtitlesChange}
-            className="w-full bg-gray-800 rounded-md p-3 border border-gray-600"
-          />
+          {/* Цвет текста */}
+          <div>
+            <label className="block text-base font-medium mb-2 text-gray-300 font-roboto">Цвет текста</label>
+            <div className="flex items-center space-x-4">
+              <input
+                type="color"
+                name="textColor"
+                value={subtitlesData.textColor}
+                onChange={handleSubtitlesChange}
+                className="w-12 h-12 rounded-md border border-gray-600 cursor-pointer transition-all duration-300 hover:scale-110 hover:shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+              />
+              <span className="text-sm text-gray-300">{subtitlesData.textColor.toUpperCase()}</span>
+            </div>
+            <p className="mt-1 text-sm text-gray-400 italic">Основной цвет для текста субтитров.</p>
+          </div>
 
+          {/* Цвет анимации/выделения */}
+          <div>
+            <label className="block text-base font-medium mb-2 text-gray-300 font-roboto">Цвет анимации/выделения</label>
+            <div className="flex items-center space-x-4">
+              <input
+                type="color"
+                name="animationColor"
+                value={subtitlesData.animationColor}
+                onChange={handleSubtitlesChange}
+                className="w-12 h-12 rounded-md border border-gray-600 cursor-pointer transition-all duration-300 hover:scale-110 hover:shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+              />
+              <span className="text-sm text-gray-300">{subtitlesData.animationColor.toUpperCase()}</span>
+            </div>
+            <p className="mt-1 text-sm text-gray-400 italic">Цвет для анимаций или выделения, как фиолетовый блок в референсе.</p>
+          </div>
+
+          {/* Позиционирование */}
+          <div>
+            <label className="block text-base font-medium mb-2 text-gray-300 font-roboto">Позиционирование</label>
+            <select 
+              name="position"
+              value={subtitlesData.position}
+              onChange={handleSubtitlesChange}
+              className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500 transition-all duration-300 hover:shadow-[0_0_5px_rgba(59,130,246,0.3)]"
+            >
+              <option value="top">Сверху</option>
+              <option value="middle">Посередине</option>
+              <option value="bottom">Снизу</option>
+            </select>
+            <p className="mt-1 text-sm text-gray-400 italic">Где разместить субтитры на экране.</p>
+          </div>
+
+          {/* Кнопка генерации */}
           <button
             onClick={handleGenerateSubtitles}
-            className="mt-4 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-md text-white text-base font-bold transition-all duration-300 hover:from-blue-600 hover:to-blue-700 hover:shadow-md hover:scale-105"
+            className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-md text-white text-base font-bold transition-all duration-300 hover:from-blue-600 hover:to-blue-700 hover:shadow-md hover:scale-105 active:scale-95"
           >
-            Генерировать
+            Установить свой текст
           </button>
+        </div>
 
+        {/* Правая часть: Превью с наложенными субтитрами */}
+        <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg">
+          <h3 className="text-xl font-bold text-white mb-4 font-roboto">Предпросмотр субтитров</h3>
+          <div className="relative w-full aspect-[16/9] bg-cover bg-center rounded-lg overflow-hidden shadow-inner transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+               style={{ backgroundImage: "url('/formats/story.jpg')" }}>
+            {/* Наложение субтитров */}
+            <div
+              className={`absolute inset-0 flex items-center justify-center px-8 py-4 text-center transition-all duration-500 ${
+                subtitlesData.position === 'top' ? 'items-start pt-8' : 
+                subtitlesData.position === 'middle' ? 'items-center' : 
+                'items-end pb-8'
+              }`}
+            >
+              <p
+                className={`text-3xl font-bold uppercase leading-tight tracking-wide shadow-text transition-all duration-300 ${
+                  subtitlesData.style === 'bold' ? 'font-extrabold' :
+                  subtitlesData.style === 'animated' ? 'animate-word-by-word' :
+                  subtitlesData.style === 'highlight' ? 'highlight-text' : ''
+                }`}
+                style={{
+                  fontFamily: subtitlesData.font,
+                  color: subtitlesData.textColor,
+                }}
+              >
+                {subtitlesData.subtitlesText || 'Пример субтитров: The light coming through the'}
+                {subtitlesData.style === 'highlight' && (
+                  <span
+                    className="inline-block mx-1 px-2 py-1 rounded-md text-white transition-colors duration-300"
+                    style={{ backgroundColor: subtitlesData.animationColor }}
+                  >
+                    coming through
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* Редактируемый текст субтитров под превью */}
           {subtitlesData.subtitlesText && (
-            <div className="mt-4">
-              <label className="block text-base font-medium mb-2 font-roboto">Субтитры</label>
+            <div className="mt-6">
+              <label className="block text-base font-medium mb-2 text-gray-300 font-roboto">Редактировать текст субтитров</label>
               <textarea
+                name="subtitlesText"
                 value={subtitlesData.subtitlesText}
                 onChange={handleSubtitlesChange}
-                name="subtitlesText"
-                className="w-full h-[200px] bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
+                className="w-full h-32 bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500 transition-all duration-300 hover:shadow-[0_0_5px_rgba(59,130,246,0.3)]"
+                placeholder="Сгенерированные субтитры появятся здесь..."
               />
+              <p className="mt-2 text-sm text-gray-400 italic">Вы можете вручную отредактировать текст для точной подгонки под озвучку.</p>
             </div>
           )}
-        </div>
-      </div>
 
-      <div className="flex justify-between mt-6">
-        <button 
-          onClick={handlePrevStep}
-          className="px-6 py-3 bg-gradient-to-r from-gray-600 to-gray-700 rounded-md text-white text-base font-medium transition-all duration-300 hover:from-gray-700 hover:to-gray-800 hover:scale-105 shadow-sm"
-        >
-          Назад
-        </button>
-        <button 
-          onClick={handleNextStep}
-          disabled={!canGoNext()}
-          className={`px-6 py-3 rounded-md text-white text-base font-bold transition-all duration-300 shadow-sm ${canGoNext() ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 hover:scale-105' : 'bg-gray-500 cursor-not-allowed'}`}
-        >
-          Далее
-        </button>
-      </div>
-    </div>
-  );
-
-  const renderEffectStep = () => (
-    <div className="space-y-6 w-full max-w-full shrink-0 px-4">
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-6 md:gap-12">
-        <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg">
-          <label className="block text-base font-medium mb-2 font-roboto">Фон</label>
-          {backgroundData.url ? (
-            backgroundData.type === 'image' ? (
-              <img src={backgroundData.url} alt="Фон" className="w-full h-48 object-cover rounded-md" />
-            ) : (
-              <video src={backgroundData.url} controls className="w-full h-48" />
-            )
-          ) : (
-            <p className="text-gray-400 text-sm font-normal">Не готов</p>
+          {/* Информация о статусе */}
+          {!subtitlesData.subtitlesText && (
+            <p className="mt-4 text-center text-gray-400 text-sm font-normal italic">Видео фрагмент который вы сейчас видите использутся в качетве макета. В рендере будет задействован ролик который вы загрузили ранее. Нажмите "Установить свой текст", чтобы увидеть превью с своим текстом. Субтитры будут синхронизированы с озвучкой в финальном видео.</p>
           )}
         </div>
-
-        <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg">
-          <label className="block text-base font-medium mb-2 font-roboto">Переход</label>
-          <select
-            name="transition"
-            value={effectData.transition}
-            onChange={handleEffectChange}
-            className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
-          >
-            <option value="fade">Fade</option>
-            <option value="slide">Slide</option>
-            <option value="zoom">Zoom</option>
-          </select>
-
-          <div className="mt-4 space-y-2">
-            <label className="flex items-center text-sm font-normal">
-              <input
-                type="checkbox"
-                name="zoom"
-                checked={effectData.zoom}
-                onChange={handleEffectChange}
-                className="mr-2 accent-blue-500"
-              />
-              Зум-эффект
-            </label>
-            <label className="flex items-center text-sm font-normal">
-              <input
-                type="checkbox"
-                name="pan"
-                checked={effectData.pan}
-                onChange={handleEffectChange}
-                className="mr-2 accent-blue-500"
-              />
-              Панорамирование
-            </label>
-          </div>
-        </div>
       </div>
 
       <div className="flex justify-between mt-6">
@@ -925,6 +984,184 @@ export default function VideoMaker() {
       </div>
     </div>
   );
+
+  // Полностью переписанный renderEffectStep с новым дизайном
+  const renderEffectStep = () => {
+        // Список 9 эффектов с плейсхолдерами видео (замените на реальные пути)
+    const effects = [
+      { name: 'fade', video: '/effects/vintage.mp4' },
+      { name: 'slide', video: '/effects/vintage.mp4' },
+      { name: 'zoom', video: '/effects/vintage.mp4' },
+      { name: 'pan', video: '/effects/vintage.mp4' },
+      { name: 'blur', video: '/effects/vintage.mp4' },
+    ];
+    const EffectGallery = () => {
+      // Ссылки на видео для ховера
+      const videoRefs = React.useRef<(HTMLVideoElement | null)[]>(new Array(effects.length).fill(null));
+
+      const handleMouseEnter = (index: number) => {
+        const video = videoRefs.current[index];
+        if (video) {
+          video.play();
+        }
+      };
+
+      const handleMouseLeave = (index: number) => {
+        const video = videoRefs.current[index];
+        if (video) {
+          video.pause();
+          video.currentTime = 0;
+        }
+      };
+
+      return (
+        <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg">
+          <h3 className="text-xl font-bold text-white mb-4 font-roboto text-center">Выберите эффект</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-3 gap-6">
+            {effects.map((effect, index) => (
+              <div
+                key={effect.name}
+                className={`relative aspect-[16/9] cursor-pointer rounded-lg overflow-hidden shadow-md transition-all duration-300 ${
+                  effectData.selectedEffect === effect.name 
+                    ? 'scale-105 border-4 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]' 
+                    : 'hover:scale-105 hover:shadow-[0_0_10px_rgba(59,130,246,0.3)]'
+                }`}
+                onClick={() => handleEffectSelect(effect.name)}
+                onMouseEnter={() => handleMouseEnter(index)}
+                onMouseLeave={() => handleMouseLeave(index)}
+              >
+                <video
+                  ref={(el) => (videoRefs.current[index] = el)}
+                  src={effect.video}
+                  className="w-full h-full object-cover"
+                  loop
+                  muted
+                  preload="auto"
+                />
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2 text-center">
+                  <span className="text-white text-sm font-medium capitalize">{effect.name}</span>
+                </div>
+              </div>
+            ))}
+            <div
+              className="relative aspect-[16/9] cursor-pointer rounded-lg overflow-hidden shadow-md transition-all duration-300 hover:scale-105 hover:shadow-[0_0_10px_rgba(59,130,246,0.3)] flex items-center justify-center bg-gray-800"
+              onClick={() => alert('Функция добавления своего эффекта (TODO: форма загрузки видео)') }
+            >
+              <span className="text-6xl text-blue-500 font-bold">+</span>
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2 text-center">
+                <span className="text-white text-sm font-medium">Добавить свой</span>
+              </div>
+            </div>
+          </div>
+          <p className="mt-4 text-center text-gray-400 text-sm font-normal italic">Наведите на эффект, чтобы увидеть превью видео. Выберите, чтобы применить к центральному просмотру.</p>
+        </div>
+      );
+    };
+
+    return (
+      <div className="space-y-6 w-full max-w-full shrink-0 px-4">
+        <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg">
+          <h3 className="text-xl font-bold text-white mb-4 font-roboto text-center">Предпросмотр эффекта</h3>
+          {/* Центральное превью (чуть больше, по центру) */}
+                    {/* Центральное превью: фон остается, эффект накладывается поверх */}
+          <div className="relative w-full max-w-4xl mx-auto aspect-[16/9] rounded-lg overflow-hidden shadow-inner transition-all duration-300 hover:scale-105 hover:shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+            {/* Фон (оставляем оригинальный, как в субтитрах) */}
+            <div
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: "url('/formats/story.jpg')" }} // Или используй backgroundData.url, если фон динамический
+            />
+            {/* Накладываем эффект как слой с screen blend */}
+            {effectData.selectedEffect && (
+              <video
+                src={effects.find(e => e.name === effectData.selectedEffect)?.video}
+                className="absolute inset-0 w-full h-full object-cover"
+                loop
+                autoPlay
+                muted
+                style={{ mixBlendMode: 'screen', opacity: effectData.opacity }}
+              />
+            )}
+            {/* Наложение субтитров поверх всего */}
+            <div
+              className={`absolute inset-0 flex items-center justify-center px-8 py-4 text-center transition-all duration-500 ${
+                subtitlesData.position === 'top' ? 'items-start pt-8' : 
+                subtitlesData.position === 'middle' ? 'items-center' : 
+                'items-end pb-8'
+              }`}
+            >
+              <p
+                className={`text-4xl font-bold uppercase leading-tight tracking-wide shadow-text transition-all duration-300 ${
+                  subtitlesData.style === 'bold' ? 'font-extrabold' :
+                  subtitlesData.style === 'animated' ? 'animate-word-by-word' :
+                  subtitlesData.style === 'highlight' ? 'highlight-text' : ''
+                }`}
+                style={{
+                  fontFamily: subtitlesData.font,
+                  color: subtitlesData.textColor,
+                }}
+              >
+                {subtitlesData.subtitlesText || 'Пример субтитров: The light coming through the'}
+                {subtitlesData.style === 'highlight' && (
+                  <span
+                    className="inline-block mx-1 px-2 py-1 rounded-md text-white transition-colors duration-300"
+                    style={{ backgroundColor: subtitlesData.animationColor }}
+                  >
+                    coming through
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* Настройки прозрачности */}
+          <label className="block text-base font-medium mb-2 text-gray-300 font-roboto">Прозрачность эффекта</label>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.1"  // Теперь шаги по 10% (0.1)
+              value={effectData.opacity}
+              onChange={handleOpacityChange}
+              className="w-full h-2 bg-gray-600 rounded-full appearance-none cursor-pointer transition-all duration-300 hover:bg-gray-500"
+              style={{
+                background: `linear-gradient(to right, #3b82f6 ${effectData.opacity * 100}%, #4b5563 ${effectData.opacity * 100}%)`,
+              }}
+            />
+            {/* Добавляем кликабельные метки с процентами */}
+            <div className="flex justify-between mt-2 text-sm text-gray-400">
+              {[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0].map(val => (
+                <button
+                  key={val}
+                  onClick={() => setEffectData({ ...effectData, opacity: val })}
+                  className={`hover:text-blue-400 transition-colors duration-300 ${effectData.opacity === val ? 'text-blue-500 font-bold' : ''}`}
+                >
+                  {Math.round(val * 100)}%
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-sm text-gray-400 italic">Регулируйте прозрачность выбранного эффекта (0% - полностью прозрачный, 100% - непрозрачный). Кликните на процент для точной установки.</p>
+        </div>
+
+        <EffectGallery />
+
+        <div className="flex justify-between mt-6">
+          <button 
+            onClick={handlePrevStep}
+            className="px-6 py-3 bg-gradient-to-r from-gray-600 to-gray-700 rounded-md text-white text-base font-medium transition-all duration-300 hover:from-gray-700 hover:to-gray-800 hover:scale-105 shadow-sm"
+          >
+            Назад
+          </button>
+          <button 
+            onClick={handleNextStep}
+            disabled={!canGoNext()}
+            className={`px-6 py-3 rounded-md text-white text-base font-bold transition-all duration-300 shadow-sm ${canGoNext() ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 hover:scale-105' : 'bg-gray-500 cursor-not-allowed'}`}
+          >
+            Далее
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   const renderFinalStep = () => (
     <div className="space-y-6 w-full max-w-full shrink-0 px-4">
@@ -1153,19 +1390,12 @@ export default function VideoMaker() {
         <div className="bg-[#181e30] p-8 rounded-xl shadow-md shadow-[0_0_10px_rgba(234,179,8,0.3)] max-w-full">
           <h2 className="text-2xl font-bold mb-4 font-roboto">Формат: {selectedFormat === 'stories' ? 'Истории' : ''}</h2>
           {renderProgressBar()}
-          <div className="overflow-hidden">
-            <div 
-              className="flex transition-transform duration-500 ease-in-out"
-              style={{ transform: `translateX(-${currentStep * 100}%)` }}
-            >
-              {renderScenarioStep()}
-              {renderVoiceStep()}
-              {renderBackgroundStep()}
-              {renderSubtitlesStep()}
-              {renderEffectStep()}
-              {renderFinalStep()}
-            </div>
-          </div>
+          {currentStep === 0 && renderScenarioStep()}
+          {currentStep === 1 && renderVoiceStep()}
+          {currentStep === 2 && renderBackgroundStep()}
+          {currentStep === 3 && renderSubtitlesStep()}
+          {currentStep === 4 && renderEffectStep()}
+          {currentStep === 5 && renderFinalStep()}
         </div>
       )}
     </div>
