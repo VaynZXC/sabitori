@@ -1,34 +1,67 @@
 generator client {
-  provider = "prisma-client-js"
+    provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+    provider = "postgresql"
+    url = env("DATABASE_URL")
 }
 
 model User {
-  id        String   @id @default(uuid())
-  username  String?  @unique
-  firstName String?
-  avatar    String?
-  email     String?
-  level     Int      @default(0)
-  plan      PlanType @default(free)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  password  String?
-  videos    Video[]
+    id String @id @default(uuid())
+    username String? @unique
+    firstName String?
+    avatar String?
+    email String?
+    level Int @default(0)
+    plan PlanType @default(free)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    password String?
+    videos Video[]
+    jobs Job[]  // Добавляем связь с Job
 }
 
 model Video {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
+    id String @id @default(uuid())
+    userId String
+    user User @relation(fields: [userId], references: [id])
 }
 
 enum PlanType {
-  free
-  base
-  pro
+    free
+    base
+    pro
+
+    }
+enum JobType {
+  SCENARIO   // генерация текста
+  VOICE      // TTS
+  VIDEO      // финальный рендер
+}
+
+enum JobStatus {
+  QUEUED       // только поставили
+  PROCESSING   // взял воркер
+  DONE         // успешно
+  FAIL         // ошибка
+}
+
+model Job {
+  id        String     @id @default(uuid())
+  type      JobType
+  status    JobStatus  @default(QUEUED)
+
+  payload   Json
+  result    Json?
+  error     String?    @db.Text
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  userId    String?
+  user      User?      @relation(fields: [userId], references: [id])
+
+  @@index([status, type])
+  @@index([userId])
 }

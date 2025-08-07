@@ -1,5 +1,7 @@
 'use client';
 
+import Image from 'next/image';
+
 export default function Gallery() {
   // Плейсхолдер — позже fetch пресетов от пользователей
   const items = [

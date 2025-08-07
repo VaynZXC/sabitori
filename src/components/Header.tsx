@@ -49,7 +49,7 @@ export default function Header() {
     <>
       <header className="h-20 px-6 flex items-center justify-between bg-brand_blue shadow-md">
         <Link href="/" className="flex items-center gap-2 ml-[10px]">
-          <img src="/logo2.png" alt="logo" className="h-14 w-auto" />
+          <img src="/logo2.png" alt="logo"  className="h-14 w-auto" />
         </Link>
 
         <div className="flex items-center gap-4 mr-[10px]">

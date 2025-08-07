@@ -5,6 +5,7 @@ import { Menu, Transition } from '@headlessui/react';
 import Link from 'next/link';
 import { Fragment, useState } from 'react';
 import EditProfileModal from '@/components/EditProfileModal';
+import Image from 'next/image';
 
 type Props = {
   user: {

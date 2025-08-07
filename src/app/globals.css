@@ -200,3 +200,13 @@ input[type="range"]::-moz-range-thumb:hover {
 .highlight-text:hover span {
   transform: scale(1.05);
 }
+
+@keyframes spin-ease {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(360deg); }
+}
+
+.spinner-custom {
+  animation: spin-ease 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+}
+

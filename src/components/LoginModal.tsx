@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import Script from "next/script";
 import TgButton from "@/components/TgButton";
+import Image from 'next/image';
 
 interface LoginModalProps {
   onClose: () => void;

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from 'next/image';
 
 // Интерфейс для пользователя (на основе твоего API)
 interface User {

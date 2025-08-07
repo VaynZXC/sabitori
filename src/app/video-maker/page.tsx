@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import Image from 'next/image';
 
 function throttle(func: (...args: any[]) => void, limit: number) {
   let inThrottle: boolean;
@@ -19,12 +20,13 @@ export default function VideoMaker() {
   const [showCustomPrompt, setShowCustomPrompt] = useState(false); // Toggle для кастомного промпта
   // Состояние для Сценария (добавил loading и error)
   const [scenarioData, setScenarioData] = useState({
-    model: 'gpt-4o-mini', // Изменил дефолт на gpt-4o-mini, как в твоём коде
-    idea: '',
-    prompt: '',
-    scenario: '',
-  });
+      model: 'openai/gpt-4o-mini', // Дефолтная модель Eden AI
+      idea: '',
+      prompt: '',
+      scenario: '',
+    });
   const [isGeneratingScenario, setIsGeneratingScenario] = useState(false);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const [scenarioError, setScenarioError] = useState<string | null>(null);
 
   // Состояние для Озвучки (добавлены gender и voiceName)
@@ -35,6 +37,7 @@ export default function VideoMaker() {
     voiceName: '',
     audioUrl: '' as string | null,
   });
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   const [backgroundData, setBackgroundData] = useState({
       type: null as 'image' | 'video' | 'youtube' | null,
@@ -122,42 +125,111 @@ export default function VideoMaker() {
   };
 
   const handleGenerateScenario = async () => {
-    setIsGeneratingScenario(true);
-    setScenarioError(null);
-    try {
-      let fullPrompt = scenarioData.idea;
-      if (showCustomPrompt && scenarioData.prompt) {
-        fullPrompt += `\n${scenarioData.prompt}`;
-      }
-      if (!fullPrompt.trim()) {
-        throw new Error('Идея или промпт обязательны');
-      }
+    setIsGeneratingScenario(true)
+    setScenarioError(null)
 
-      let response;
-      const apiEndpoint = scenarioData.model.startsWith('grok') ? '/api/generate-scenario-grok' : '/api/generate-scenario-chatgpt';
-      response = await fetch(apiEndpoint, {
+    try {
+      /* ---------- 1. формируем fullPrompt как у тебя было ---------- */
+      let fullPrompt = ''
+      if (showCustomPrompt && scenarioData.prompt.trim()) {
+        fullPrompt = scenarioData.prompt
+      } else {
+        if (!scenarioData.idea.trim()) {
+          throw new Error('Идея обязательна, если кастомный промпт не используется')
+        }
+        fullPrompt = `
+        
+          You are an award-winning radio dramatist crafting long-form narrative scripts for a YouTube storytelling channel watched mainly by English-speaking men around 50 years old.
+
+          TASK  
+          Write a first-person monologue that feels like a real Reddit confession (think r/TrueOffMyChest or r/nosleep) on the topic “{scenarioData.idea}”.  
+          Do not use indents, paragraphs, etc. Write continuous text so that it is as large as possible.
+          Target length: 4000 words (≈30 minutes aloud).
+
+          MANDATORY ELEMENTS  
+          1. Open with a three-sentence hook that shocks or intrigues the viewer immediately.  
+          2. Maintain relentless tension: every paragraph must deepen the mystery, raise the stakes, or expose betrayal. No filler.  
+          3. Insert one major twist at roughly the midpoint that flips audience expectations.  
+          4. Conclude with a moment of reflection or moral takeaway that feels earned, never preachy.  
+          5. Keep a spoken-word rhythm: paragraphs of 3-4 sentences, use ellipses (…) and occasional one-sentence paragraphs for punch.  
+          6. After roughly every 2 000 words, insert *exactly twice* this parenthetical subscribe prompt (adjust wording slightly if needed, but keep it brisk and friendly):  
+
+            (Enjoying the story? Hit subscribe so you don’t miss more gripping tales of ordinary lives turned upside-down.)
+
+          7. Language: contemporary U.S. English, vivid but plain; avoid slang younger than the target demographic.  
+          8. No profanity stronger than “damn” or “hell.”  
+          9. Before the script, provide:  
+            • "TITLE:" — a captivating title that could be a Reddit post headline.  
+            • "WORD COUNT:" — approximate count (e.g., “~4 000”).  
+
+          OUTPUT FORMAT (exactly this structure)
+
+          TITLE: <Your compelling title here>  
+          WORD COUNT: <approx. number>
+
+          <Full script starts here>
+          
+          `
+      }
+      if (!fullPrompt.trim()) throw new Error('Промпт или идея обязательны')
+
+      /* ---------- 2. ставим задачу в очередь ---------- */
+      const res = await fetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: fullPrompt,
-          model: scenarioData.model,
-          max_tokens: 5000,
-          temperature: 0.7,
+          type: 'SCENARIO',
+          payload: {
+            prompt: fullPrompt,
+            model: scenarioData.model,
+            maxTokens: 16000,
+            temperature: 0.7,
+          },
         }),
-      });
+      })
 
-      if (!response.ok) {
-        throw new Error('Ошибка сервера');
+      if (res.status !== 202) {
+        const { error } = await res.json()
+        throw new Error(error ?? 'Не удалось создать задачу')
       }
 
-      const data = await response.json();
-      setScenarioData({ ...scenarioData, scenario: data.scenario });
-    } catch (err) {
-      setScenarioError((err as Error).message || 'Неизвестная ошибка');
-    } finally {
-      setIsGeneratingScenario(false);
+      const { id: jobId } = await res.json()   // ← uuid в БД
+
+      /* ---------- 3. опрос результата ---------- */
+      const poll = setInterval(async () => {
+      const r     = await fetch(`/api/jobs/${jobId}`)
+      const data  = await r.json()        // { status, result?, error? }
+
+      switch (data.status) {
+        case 'DONE': {
+          clearInterval(poll)
+
+          // result может быть либо объектом, либо готовой строкой
+          const txt = typeof data.result === 'string'
+                        ? data.result
+                        : data.result.generated_text ?? ''
+
+          setScenarioData(s => ({ ...s, scenario: txt }))
+          setIsGeneratingScenario(false)
+          break
+        }
+
+        case 'FAIL':
+          clearInterval(poll)
+          setScenarioError(data.error ?? 'Ошибка генерации')
+          setIsGeneratingScenario(false)
+          break
+
+
+        // 'QUEUED' | 'PROCESSING' – ничего не делаем, ждём следующего тика
+      }
+    }, 2000) 
+    } catch (err: any) {
+      setScenarioError(err.message ?? 'Неизвестная ошибка')
+      setIsGeneratingScenario(false)
     }
-  };
+  }
+
 
   // Обработчики для Озвучки (обновлено для gender и voiceName)
   const handleVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -173,13 +245,40 @@ export default function VideoMaker() {
   };
 
   const handleGenerateVoice = async () => {
-    if (!voiceData.voiceName) return; // Предотвращаем генерацию без голоса
+    if (!voiceData.voiceName || !scenarioData.scenario.trim()) return;
     setIsGenerating(true);
-    // Симуляция задержки для API (в реальности: await fetch(...))
-    await new Promise(resolve => setTimeout(resolve, 3000)); // 3 секунды
-    const audioUrl = '/audio/test.mp3'; // Для тестов; замени на реальный URL от API
-    setVoiceData({ ...voiceData, audioUrl });
-    setIsGenerating(false);
+    setVoiceError(null);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // ждём 3 мин
+    try {
+      const response = await fetch('/api/generate-voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: scenarioData.scenario,
+          voice: voiceData.voiceName, // Это voiceId
+          intonation: voiceData.intonation, // Можно использовать для кастомизации settings
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Ошибка сервера: ${response.status} - ${errorText}`);
+      }
+      const data = await response.json();
+      setVoiceData({ ...voiceData, audioUrl: data.audioUrl });
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setScenarioError('Запрос прерван: слишком долгое ожидание (таймаут)');
+      } else if (err instanceof Error) {
+        setScenarioError(err.message || 'Неизвестная ошибка');
+      } else {
+        setScenarioError('Неизвестная ошибка');
+      }
+    } finally {
+      clearTimeout(timeoutId);
+      setIsGenerating(false);
+    }
   };
 
   // Плейсхолдер для голосов (можно расширить по моделям)
@@ -187,23 +286,18 @@ export default function VideoMaker() {
     const { model, gender } = voiceData;
     if (model === 'elevenlabs') {
       if (gender === 'male') {
-        return ['Adam', 'Josh', 'Matthew'];
+        return [
+          { id: 'hzLyDn3IrvrdH83BdqUu', name: 'Adam' },
+          { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh' },
+          { id: 'IKne3meq5aSn9XLyUdCD', name: 'Charlie' },
+        ];
       } else {
-        return ['Alice', 'Bella', 'Clara'];
+        return [
+          { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel' },
+          { id: 'AZnzlk1XvdvUeBnXmlld', name: 'Bella' },
+        ];
       }
-    } else if (model === 'google-tts') {
-      if (gender === 'male') {
-        return ['en-US-Wavenet-D', 'ru-RU-Wavenet-B'];
-      } else {
-        return ['en-US-Wavenet-F', 'ru-RU-Wavenet-A'];
-      }
-    } else if (model === 'amazon-polly') {
-      if (gender === 'male') {
-        return ['Matthew', 'Justin'];
-      } else {
-        return ['Joanna', 'Salli'];
-      }
-    }
+    } // ... (для google/amazon аналогично, но с именами)
     return [];
   };
 
@@ -392,9 +486,10 @@ export default function VideoMaker() {
             onChange={handleScenarioChange}
             className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500 transition-all"
           >
-            <option value="gpt-4o">ChatGPT</option>
-            <option value="claude">Claude</option> {/* Если Claude — добавь отдельный SDK позже */}
-            <option value="grok-3-mini">Grok</option> {/* Добавили Grok */}
+            <option value="openai/gpt-4o-mini">GPT-4o-mini</option>
+            <option value="openai/gpt-4o">GPT-4o</option>
+            <option value="openai/gpt-4.1-2025-04-14">GPT-4.1 (Eden)</option>
+            <option value="anthropic/claude-3.5-sonnet">Claude-3.5-Sonnet</option>
           </select>
           <label className="block text-base font-medium mt-4 mb-2 font-roboto">Идея</label>
           <textarea
@@ -433,7 +528,13 @@ export default function VideoMaker() {
           {scenarioError && <p className="mt-2 text-red-500 text-sm">{scenarioError}</p>}
         </div>
         <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg">
-          <label className="block text-base font-medium mb-2 font-roboto">Сценарий</label>
+        <label className="block text-base font-medium mb-2 font-roboto">Сценарий</label>
+        {isGeneratingScenario ? (
+          <div className="flex flex-col items-center justify-center h-[400px]">
+            <div className="spinner-custom h-16 w-16 border-4 border-t-blue-500 border-b-blue-500 border-l-gray-700 border-r-gray-700 rounded-full mb-4 shadow-lg"></div>
+            <p className="text-blue-400 font-medium animate-pulse">Создаю сценарий...</p>
+          </div>
+        ) : (
           <textarea
             name="scenario"
             value={scenarioData.scenario}
@@ -441,7 +542,9 @@ export default function VideoMaker() {
             className="w-full h-[400px] bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
             placeholder="Результат здесь... (можно редактировать вручную)"
           />
-        </div>
+        )}
+      </div>
+
       </div>
       <div className="flex justify-between mt-6">
         <button
@@ -464,102 +567,106 @@ export default function VideoMaker() {
   const renderVoiceStep = () => (
     <div className="space-y-6 w-full max-w-full shrink-0 px-4">
       <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-6 md:gap-12">
-          <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg flex flex-col">
-            <label className="block text-base font-medium mb-2 font-roboto">Сценарий</label>
-            <div className={`transition-all duration-500 ease-in-out ${isGenerating || voiceData.audioUrl ? 'h-[300px]' : 'h-[400px]'} overflow-hidden`}>
-              <textarea
-                value={scenarioData.scenario}
-                className="w-full h-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600"
-                readOnly
-              />
-            </div>
-            <div className="mt-4 transition-opacity duration-300 opacity-100">
-              {isGenerating ? (
-                <div className="flex flex-col items-center justify-center h-32 bg-gray-800 rounded-lg shadow-inner animate-pulse">
-                  <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="mt-2 text-sm font-medium text-blue-400 animate-bounce">Генерация озвучки...</p>
-                </div>
-              ) : voiceData.audioUrl ? (
-                <CustomAudioPlayer src={voiceData.audioUrl} />
-              ) : (
-                <p className="text-center text-sm font-normal text-gray-400">Озвучка не готова. Сгенерируйте её.</p>
-              )}
-            </div>
+        <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg flex flex-col">
+          <label className="block text-base font-medium mb-2 font-roboto">Сценарий</label>
+          <div className={`transition-all duration-500 ease-in-out ${isGenerating || voiceData.audioUrl ? 'h-[300px]' : 'h-[400px]'} overflow-hidden`}>
+            <textarea
+              value={scenarioData.scenario}
+              className="w-full h-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600"
+              readOnly
+            />
           </div>
-
-          <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg">
-            <label className="block text-base font-medium mb-2 font-roboto">Модель озвучки</label>
-            <select
-              name="model"
-              value={voiceData.model}
-              onChange={handleVoiceChange}
-              className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
-            >
-              <option value="elevenlabs">ElevenLabs</option>
-              <option value="google-tts">Google TTS</option>
-              <option value="amazon-polly">Amazon Polly</option>
-            </select>
-
-            <label className="block text-base font-medium mt-4 mb-2 font-roboto">Пол голоса</label>
-            <select
-              name="gender"
-              value={voiceData.gender}
-              onChange={handleVoiceChange}
-              className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
-            >
-              <option value="male">Мужской</option>
-              <option value="female">Женский</option>
-            </select>
-
-            <label className="block text-base font-medium mt-4 mb-2 font-roboto">Интонация</label>
-            <select
-              name="intonation"
-              value={voiceData.intonation}
-              onChange={handleVoiceChange}
-              className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
-            >
-              <option value="narrative">Повествование</option>
-              <option value="energetic">Энергичная</option>
-              <option value="calm">Спокойная</option>
-              <option value="universal">Универсальная</option>
-            </select>
-
-            <label className="block text-base font-medium mt-4 mb-2 font-roboto">Голос</label>
-            <select
-              name="voiceName"
-              value={voiceData.voiceName}
-              onChange={handleVoiceChange}
-              className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
-              disabled={!voiceData.gender}
-            >
-              <option value="">Выберите голос...</option>
-              {getVoiceOptions().map((voice) => (
-                <option key={voice} value={voice}>
-                  {voice}
-                </option>
-              ))}
-            </select>
-
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={handleGenerateVoice}
-                disabled={!voiceData.voiceName || isGenerating}
-                className={`px-6 py-3 rounded-md text-white text-base font-bold transition-all duration-300 ${voiceData.voiceName && !isGenerating ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:shadow-md hover:scale-105' : 'bg-gray-500 cursor-not-allowed'}`}
-              >
-                {isGenerating ? 'Генерирую...' : 'Генерировать'}
-              </button>
-            </div>
+          <div className="mt-4 transition-opacity duration-300 opacity-100">
+            {isGenerating ? (
+              <div className="flex flex-col items-center justify-center h-32 bg-gray-800 rounded-lg shadow-inner animate-pulse">
+                <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="mt-2 text-sm font-medium text-blue-400 animate-bounce">Генерация озвучки...</p>
+              </div>
+            ) : voiceData.audioUrl ? (
+              <CustomAudioPlayer src={voiceData.audioUrl} />
+            ) : (
+              <p className="text-center text-sm font-normal text-gray-400">Озвучка не готова. Сгенерируйте её.</p>
+            )}
           </div>
         </div>
-
+        <div className="bg-[#141722] rounded-xl p-6 shadow-md transition-all duration-300 hover:shadow-lg">
+          <label className="block text-base font-medium mb-2 font-roboto">Модель озвучки</label>
+          <select
+            name="model"
+            value={voiceData.model}
+            onChange={handleVoiceChange}
+            className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
+          >
+            <option value="elevenlabs">ElevenLabs</option>
+            <option value="google">Google TTS / Скоро...</option>
+            <option value="amazon">Amazon Polly / Скоро...</option>
+          </select>
+          <label className="block text-base font-medium mt-4 mb-2 font-roboto">Пол голоса</label>
+          <select
+            name="gender"
+            value={voiceData.gender}
+            onChange={handleVoiceChange}
+            className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
+          >
+            <option value="male">Мужской</option>
+            <option value="female">Женский</option>
+          </select>
+          <label className="block text-base font-medium mt-4 mb-2 font-roboto">Интонация</label>
+          <select
+            name="intonation"
+            value={voiceData.intonation}
+            onChange={handleVoiceChange}
+            className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
+          >
+            <option value="narrative">Повествование</option>
+            <option value="energetic">Энергичная</option>
+            <option value="calm">Спокойная</option>
+            <option value="universal">Универсальная</option>
+          </select>
+          <label className="block text-base font-medium mt-4 mb-2 font-roboto">Голос</label>
+          {(() => {
+            const voiceOptions = getVoiceOptions();
+            if (voiceOptions.length > 0) {
+              return (
+                <select
+                name="voiceName"
+                value={voiceData.voiceName}
+                onChange={handleVoiceChange}
+                className="w-full bg-gray-800 rounded-md p-3 text-base text-white border border-gray-600 focus:border-blue-500"
+                disabled={!voiceData.gender}
+              >
+                <option value="">Выберите голос...</option>
+                {getVoiceOptions().map((voice) => (
+                  <option key={voice.id} value={voice.id}>
+                    {voice.name}
+                  </option>
+                ))}
+              </select>
+              );
+            } else {
+              return <p className="text-gray-400 text-sm">Нет доступных голосов для этой модели. Используется дефолтный по полу.</p>;
+            }
+          })()}
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={handleGenerateVoice}
+              disabled={isGenerating}
+              className={`px-6 py-3 rounded-md text-white text-base font-bold transition-all duration-300 ${!isGenerating ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 hover:shadow-md hover:scale-105' : 'bg-gray-500 cursor-not-allowed'}`}
+            >
+              {isGenerating ? 'Генерирую...' : 'Генерировать'}
+            </button>
+          </div>
+          {voiceError && <p className="mt-2 text-red-500 text-sm">{voiceError}</p>}
+        </div>
+      </div>
       <div className="flex justify-between mt-6">
-        <button 
+        <button
           onClick={handlePrevStep}
           className="px-6 py-3 bg-gradient-to-r from-gray-600 to-gray-700 rounded-md text-white text-base font-medium transition-all duration-300 hover:from-gray-700 hover:to-gray-800 hover:scale-105 shadow-sm"
         >
           Назад
         </button>
-        <button 
+        <button
           onClick={handleNextStep}
           disabled={!canGoNext()}
           className={`px-6 py-3 rounded-md text-white text-base font-bold transition-all duration-300 shadow-sm ${canGoNext() ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 hover:scale-105' : 'bg-gray-500 cursor-not-allowed'}`}
@@ -1031,12 +1138,13 @@ export default function VideoMaker() {
                 onMouseLeave={() => handleMouseLeave(index)}
               >
                 <video
-                  ref={(el) => (videoRefs.current[index] = el)}
+                  ref={(el: HTMLVideoElement | null) => {
+                    videoRefs.current[index] = el;   // сохраняем
+                    // ничего не возвращаем → тип void
+                  }}
                   src={effect.video}
                   className="w-full h-full object-cover"
                   loop
-                  muted
-                  preload="auto"
                 />
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2 text-center">
                   <span className="text-white text-sm font-medium capitalize">{effect.name}</span>
@@ -1363,6 +1471,12 @@ export default function VideoMaker() {
       </div>
     );
   };
+
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
 
   return (
     <div className="p-8 max-w-full overflow-x-hidden">
