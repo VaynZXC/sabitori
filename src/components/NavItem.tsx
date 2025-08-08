@@ -1,5 +1,5 @@
 import Link from "next/link";
-import Image from 'next/image';
+import clsx from 'clsx';
 import { ReactNode } from "react";
 
 interface Props {
@@ -7,7 +7,7 @@ interface Props {
   iconSrc: string;
   iconColor?: string;  // Теперь опциональный
   chevron?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
   badge?: string;
 }
 
@@ -32,7 +32,12 @@ export default function NavItem({
     >
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-2">
-          <div className={`flex items-center justify-center w-8 h-8 rounded-full bg-${iconColor} p-1`}>
+          <div
+            className={clsx(
+              'flex items-center justify-center w-8 h-8 rounded-full p-1',
+              iconColor && `bg-${iconColor}`,
+            )}
+          >
             <img src={iconSrc} alt="" className="h-6 w-6 object-contain" />
           </div>
           <span className="text-lg font-semibold leading-none">{children}</span>
