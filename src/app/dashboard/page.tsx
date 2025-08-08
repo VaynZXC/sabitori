@@ -91,7 +91,9 @@ export default function Dashboard() {
 
       <div className="bg-profile p-8 rounded-xl shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl text-center">  {/* Анимация подъёма */}
         <h2 className="text-2xl font-bold mb-4">Текущие задачи</h2>
-        <p className="text-lg text-gray-400 font-normal">Здесь будут отображаться ваши видео в процессе генерации. Пока задач нет.</p>
+        <p className="text-lg text-gray-400 font-normal">
+          Здесь будут отображаться ваши видео в процессе генерации. Пока задач нет.
+        </p>
       </div>
     </div>
   );
